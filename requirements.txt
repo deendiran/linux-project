@@ -1,0 +1,8 @@
+Flask==3.1.0
+flask-cors==5.0.0
+psycopg2-binary==2.9.10
+numpy==2.0.2
+python-dotenv==1.0.1
+geopy==2.4.1
+earthengine-api==1.4.3
+flask-lambda==0.0.4

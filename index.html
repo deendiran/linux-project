@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flood Prediction System</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        #map {
+            height: 500px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .analysis-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .metrics-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .historical-charts {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            height: 300px;
+        }
+
+        .risk-indicator {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .risk-high { background: #dc3545; }
+        .risk-medium { background: #ffc107; color: black; }
+        .risk-low { background: #28a745; }
+
+        .satellite-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .satellite-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .image-label {
+            text-align: center;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+
+        .location-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            padding: 10px 20px;
+            background-color: #fff;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .location-button:hover {
+            background-color: #f4f4f4;
+        }
+
+        .historical-data {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .historical-data table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .historical-data th,
+        .historical-data td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .historical-data th {
+            background-color: #f1f1f1;
+        }
+
+        .search-control {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .search-control input {
+            width: 200px;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+
+        .search-control button {
+            width: 100%;
+            padding: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .water-body {
+            background: #e3f2fd;
+            padding: 5px 10px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .water-body:hover {
+            background: #bbdefb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Flood Prediction System</h1>
+        <p>Click on the map or allow location access to analyze flood risk in your area.</p>
+
+        <div class="analysis-grid">
+            <div id="map" style="position: relative;">
+                <button class="location-button" onclick="getCurrentLocation()">
+                    📍 Get My Location
+                </button>
+                <div class="search-control">
+                    <input type="text" id="searchInput" placeholder="Search for water bodies...">
+                    <button onclick="searchWaterBodies()">Search</button>
+                    <div id="searchResults"></div>
+                </div>
+            </div>
+            <div class="analysis-panel" id="analysisPanel">
+                <h2>Analysis Results</h2>
+                <div id="locationInfo"></div>
+                <div class="metrics-container">
+                    <div class="metric-card" id="vegetationMetric">
+                        <h3>Vegetation Density</h3>
+                        <div id="ndviValue"></div>
+                    </div>
+                    <div class="metric-card" id="soilMetric">
+                        <h3>Soil Moisture</h3>
+                        <div id="soilValue"></div>
+                    </div>
+                    <div class="metric-card" id="waterMetric">
+                        <h3>Water Level</h3>
+                        <div id="waterValue"></div>
+                    </div>
+                </div>
+                <div class="historical-data">
+                    <h3>Historical Data (Last 10 Days)</h3>
+                    <div id="historicalTable"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let marker;
+        let selectedArea;
+        let historicalChart;
+        let waterBodiesLayer;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            setupHistoricalChart();
+        });
+
+        function initializeMap() {
+            map = L.map('map').setView([0.0236, 37.9062], 8);
+
+            // Add standard OpenStreetMap layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Add water bodies layer (OpenStreetMap water layer)
+            waterBodiesLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                opacity: 0.6
+            }).addTo(map);
+
+            map.on('click', handleLocationSelect);
+        }
+
+        function getCurrentLocation() {
+            if ("geolocation" in navigator) {
+                // Enable high accuracy and set timeout
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                };
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const userLocation = [position.coords.latitude, position.coords.longitude];
+                        
+                        // Reverse geocode to get location name
+                        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${userLocation[0]}&lon=${userLocation[1]}&format=json`)
+                            .then(response => response.json())
+                            .then(data => {
+                                map.setView(userLocation, 15);
+                                handleLocationSelect({ 
+                                    latlng: { 
+                                        lat: userLocation[0], 
+                                        lng: userLocation[1] 
+                                    },
+                                    locationName: data.display_name
+                                });
+                            });
+                    },
+                    function(error) {
+                        console.error("Error getting location:", error);
+                        alert("Error getting location: " + error.message);
+                    },
+                    options
+                );
+            } else {
+                alert("Geolocation is not supported by your browser");
+            }
+        }
+
+        function handleLocationSelect(e) {
+            if (selectedArea) {
+                map.removeLayer(selectedArea);
+            }
+            if (marker) {
+                map.removeLayer(marker);
+            }
+
+            // Add marker at clicked location
+            marker = L.marker(e.latlng).addTo(map);
+
+            selectedArea = L.circle(e.latlng, {
+                radius: 2000,
+                color: 'red',
+                fillColor: '#f03',
+                fillOpacity: 0.3
+            }).addTo(map);
+
+            // Pass the location name if available
+            fetchAnalysisData(e.latlng, e.locationName);
+        }
+
+        function setupHistoricalChart() {
+            const ctx = document.getElementById('historicalChart').getContext('2d');
+            historicalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'NDVI',
+                            borderColor: 'rgb(75, 192, 192)',
+                            data: []
+                        },
+                        {
+                            label: 'Soil Moisture',
+                            borderColor: 'rgb(153, 102, 255)',
+                            data: []
+                        },
+                        {
+                            label: 'Water Level',
+                            borderColor: 'rgb(54, 162, 235)',
+                            data: []
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        async function searchWaterBodies() {
+            const searchTerm = document.getElementById('searchInput').value;
+            if (!searchTerm) return;
+
+            try {
+                // Search for water bodies using Nominatim
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${searchTerm}+water&format=json&featuretype=water`
+                );
+                const results = await response.json();
+
+                // Display results
+                const resultsDiv = document.getElementById('searchResults');
+                resultsDiv.innerHTML = '';
+
+                results.forEach(result => {
+                    const div = document.createElement('div');
+                    div.className = 'water-body';
+                    div.textContent = result.display_name;
+                    div.onclick = () => {
+                        map.setView([result.lat, result.lon], 15);
+                        handleLocationSelect({
+                            latlng: {
+                                lat: result.lat,
+                                lng: result.lon
+                            },
+                            locationName: result.display_name
+                        });
+                    };
+                    resultsDiv.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error searching for water bodies:', error);
+                alert('Error searching for water bodies');
+            }
+        }
+
+        async function fetchAnalysisData(latlng, locationName) {
+            try {
+                const response = await fetch('http://localhost:5000/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        lat: latlng.lat,
+                        lng: latlng.lng,
+                        locationName: locationName // Pass location name if available
+                    })
+                });
+
+                const data = await response.json();
+                updateAnalysisDisplay(data);
+            } catch (error) {
+                console.error('Error fetching analysis:', error);
+                alert('Error fetching analysis data');
+            }
+        }
+
+        function updateAnalysisDisplay(data) {
+            document.getElementById('locationInfo').innerHTML = `
+                <h3>Location: ${data.location}</h3>
+                <p>Coordinates: ${data.coordinates}</p>
+                <p>Flood Risk: <span class="risk-indicator risk-${data.risk_level.toLowerCase()}">${data.risk_level}</span></p>
+                <p>Prediction Confidence: ${data.confidence}%</p>
+            `;
+
+            document.getElementById('ndviValue').innerHTML = `
+                <p>Current: ${data.vegetation.ndvi}</p>
+                <p>Trend: ${data.vegetation.trend}</p>
+            `;
+
+            document.getElementById('soilValue').innerHTML = `
+                <p>Current: ${data.soil_moisture.value}%</p>
+                <p>Saturation: ${data.soil_moisture.saturation}</p>
+            `;
+
+            const waterLevel = data.water_level || { value: 'N/A', change: 'N/A' };
+            document.getElementById('waterValue').innerHTML = `
+                <p>Current: ${typeof waterLevel.value === 'number' ? waterLevel.value.toFixed(2) + ' m' : waterLevel.value}</p>
+                <p>Change: ${waterLevel.change}</p>
+            `;
+
+            // Update historical table
+            updateHistoricalTable(data.historical_data);
+        }
+
+        function updateHistoricalTable(historicalData) {
+            const tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vegetation Density</th>
+                            <th>Soil Moisture</th>
+                            <th>Water Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${historicalData.dates.map((date, i) => `
+                            <tr>
+                                <td>${date}</td>
+                                <td>${historicalData.ndvi[i]}</td>
+                                <td>${historicalData.soil_moisture[i]}</td>
+                                <td>${historicalData.water_level ? historicalData.water_level[i] : 'N/A'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('historicalTable').innerHTML = tableHTML;
+        }
+
+    </script>
+</body>
+</html>
